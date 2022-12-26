@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import pygame
-from sortedcontainers import SortedList, SortedDict
+# from sortedcontainers import SortedList, SortedDict
 
 vec2 = pygame.math.Vector2
 vec3 = pygame.math.Vector3
@@ -388,7 +388,7 @@ class Tileset:
 
 class Tilemap:
     def __init__(self, name:str, tilesets:list[Tileset], size:vec2, tile_size:vec2) -> None:
-        self._tilesets = SortedDict({t._start_index:t for t in tilesets})
+        self._tilesets = dict({t._start_index:t for t in tilesets})
         self._sx = tile_size.x
         self._sy = tile_size.y
         self._size = size if size else vec2()
@@ -1045,7 +1045,7 @@ class Scene:
         self._objects : List[SceneComponent] = []
         self.manual_rendering : bool = False
         self.active_camera : Camera = OrthographicCamera() # type: ignore
-        self._drawables : SortedList = SortedList()
+        self._drawables : list = []
         self._tilemaps : list[Tilemap] = []
         self._tilesets : list[Tileset] = []
         self._backgrounds : list[SpriteComponent] = []
