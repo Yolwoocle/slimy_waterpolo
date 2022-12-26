@@ -1168,6 +1168,7 @@ class PhysicsWorld:
     def set_limits(self, min, max):
         assert type(min)==vec3 and type(max)==vec3
         self.limits = [min, max]
+        return self
     
     def register_physics_component(self, obj:'PhysicsComponent'):
         assert issubclass(type(obj), PhysicsComponent)
