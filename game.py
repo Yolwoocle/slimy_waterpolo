@@ -21,7 +21,6 @@ while game.is_alive():
 
     # Update parent/ child transforms, quite effective for now but may require a rewrite later
     scene.update()
-    # Makes the camera follow the player
 
     scene.draw()
 
