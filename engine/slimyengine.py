@@ -19,7 +19,7 @@ else:
     INSTALLED=False
 
 try:
-    import pyi_splash
+    import pyi_splash # type: ignore
 
     pyi_splash.update_text("Loading the engine...")
 
@@ -1428,19 +1428,18 @@ class SpriteComponent(DrawableComponent):
 
 
 class Actor(Object):
-    def __init__(self, pos=vec3()):
+    def __init__(self, pos:vec3|None=None):
         Object.__init__(self)
-        self._root = SceneComponent(None, pos=pos)
-    
+        self._root:SceneComponent = SceneComponent(None, pos)
     
     @property
-    def root(self):
+    def root(self) -> SceneComponent:
         return self._root
 
 class Pawn(Actor):
-    def __init__(self, world:PhysicsWorld, pos=vec3(), image_name="default"):
+    def __init__(self, world:PhysicsWorld, pos:vec3|None=None, image_name:str="default"):
         Actor.__init__(self, pos=pos)
-        self._root = PhysicsComponent(None, world, mass=0.1)
+        self._root = PhysicsComponent(None, world,pos=pos, mass=0.1)
         self._root.forces = [GravityForce(-9.81), FrictionForce()]
         self.shadow = SpriteComponent(self.root, image_name="default_shadow")
         self.shadow.size = vec3(10, 10, 10)
