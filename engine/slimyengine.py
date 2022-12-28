@@ -763,7 +763,8 @@ class SceneComponent(Component):
     def update(self):
         # if self._valid: return
         # self._update_count+=1
-        if self._parent: self._parent_pos=self._parent.get_world_position() if self._inherit_parent_position else vec3()
+        if self._parent:
+            self._parent_pos=self._parent.get_world_position() if self._inherit_parent_position else vec3()
         for child in self._children:
             # child._parent_pos = vec3(self._parent_pos+self._pos)
             child.update()
@@ -1314,10 +1315,10 @@ class PhysicsComponent(DrawableComponent, SceneComponent):
         self.acc = vec3()
         self.simulate_physics = True
 
-        self._bounding_box = BoundingBox(self._pos-self._size/2, self._pos+self._size/2)
+        self._bounding_box = BoundingBox(-self._size/2, self._size/2)
 
-        self.forces    :list[Force] = []
-        self.one_forces:list[Force] = []
+        self._forces:list[Force] = []
+        self._forces_count:int   = 0
 
         world.register_physics_component(self)
     
@@ -1332,23 +1333,29 @@ class PhysicsComponent(DrawableComponent, SceneComponent):
         return self
 
     def draw(self):
-        Globals.game.draw_debug_rectangle(Globals.game.camera.world_to_screen(set_z(self._bounding_box._begin, 0)),
-                                        Globals.game.camera.world_to_screen(set_z(self._bounding_box._end, 0)), color=vec3(255, 150, 0), thickness=1)
+        Globals.game.draw_debug_box((set_z(self.get_world_position()+self._bounding_box._begin, 0)),
+                                        (set_z(self.get_world_position()+self._bounding_box._end, 0)), color=vec3(255, 150, 0), thickness=1)
         pass
+
+    def apply_force(self, force:Force) -> 'PhysicsComponent':
+        if self._forces_count>=len(self._forces):
+            self._forces.append(force)
+            self._forces_count+=1
+        else:
+            self._forces[self._forces_count]=force
+            self._forces_count+=1
+        return self
     
     def tick(self, dt:float):
         if not self.simulate_physics: return
         
         self.acc = vec3()
-        for f in self.forces:
+        for f in self._forces:
             force = f.get(self)
             self.acc += force
-            Globals.game.draw_debug_vector(self._pos, self._pos+0.1*force)
-        for f in self.one_forces:
-            force = f.get(self)
-            self.acc += force
-            Globals.game.draw_debug_vector(self._pos, self._pos+0.1*force, (0,0,255))
-        self.one_forces = []
+            Globals.game.draw_debug_vector(Globals.game.camera.world_to_screen(self._pos), Globals.game.camera.world_to_screen(self._pos+0.1*force))
+
+        self._forces_count = 0
         self.acc /= self.mass
         # log("Accélération : {}".format(self.acc))
         self.vel += self.acc * dt
@@ -1435,12 +1442,14 @@ class Actor(Object):
     @property
     def root(self) -> SceneComponent:
         return self._root
+    
+    def tick(self, dt:float):
+        pass
 
 class Pawn(Actor):
     def __init__(self, world:PhysicsWorld, pos:vec3|None=None, image_name:str="default"):
         Actor.__init__(self, pos=pos)
-        self._root = PhysicsComponent(None, world,pos=pos, mass=0.1)
-        self._root.forces = [GravityForce(-9.81), FrictionForce()]
+        self._root:PhysicsComponent = PhysicsComponent(None, world,pos=pos, mass=0.1)
         self.shadow = SpriteComponent(self.root, image_name="default_shadow")
         self.shadow.size = vec3(10, 10, 10)
         self.shadow.set_inherit_parent_location(False)
@@ -1448,7 +1457,10 @@ class Pawn(Actor):
         self.shadow.set_size(vec3(1, 1, 0))
         self.character = SpriteComponent(self.root, image_name=image_name)
     
-    def update(self):        
+    def tick(self, dt:float):
+        Actor.tick(self, dt)
+        self._root.apply_force(GravityForce(-9.81)).apply_force(FrictionForce())
+        log(self.root.get_world_position())
         self.shadow._pos = vec3(self.root.get_world_position().x, self.root.get_world_position().y, Globals.world.line_trace(self.root.get_local_position(), vec3(0, 0, -1)).z)
 
 
