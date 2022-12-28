@@ -11,7 +11,21 @@ import json
 from pathlib import Path
 
 import pygame
-# from sortedcontainers import SortedList, SortedDict
+from sortedcontainers import SortedList, SortedDict
+
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    INSTALLED=True
+else:
+    INSTALLED=False
+
+try:
+    import pyi_splash
+
+    pyi_splash.update_text("Loading the engine...")
+
+    pyi_splash.close()
+except:
+    pass
 
 vec2 = pygame.math.Vector2
 vec3 = pygame.math.Vector3
@@ -487,17 +501,17 @@ class Game:
         self.title = title
         pygame.display.set_caption(title)
         self._clock = pygame.time.Clock()
-        self.load_font("debug_default", "engine/debug_font.ttf")
+        self.load_font("debug_default", "data/debug_font.ttf")
 
-        self.load_image("default", "engine/default.png")
-        self.load_image("default_shadow", "engine/default_shadow.png")
-        self.load_image("default_particle", "engine/default_particle.png")
+        self.load_image("default", "data/default.png")
+        self.load_image("default_shadow", "data/default_shadow.png")
+        self.load_image("default_particle", "data/default_particle.png")
 
         return self
     
     def load_font(self, name, path, size=28, force_reload=False):
         if (not self._fonts.get(name)) or force_reload:
-            self._fonts[name] = pygame.font.Font(path, size)
+            self._fonts[name] = pygame.font.Font(self.resource_path(path), size)
             return True
         return False
     
@@ -553,10 +567,13 @@ class Game:
         self._background_color = color
         return self
     
+    def update_size(self) -> None:
+        self.camera.update_screen_size(self.size)
+        self.active_scene.update_screen_size(self.size)
+    
     def on_resize(self, event):
         self.size = (event.dict['size'][0], event.dict['size'][1])
-        self.camera.update_screen_size(event.dict['size'])
-        self.active_scene.update_screen_size(event.dict['size'])
+        self.update_size()
         pass
     
     def begin_frame(self, dont_clear=False):
@@ -570,71 +587,87 @@ class Game:
         if not dont_clear:
             self.screen.fill(self._background_color)
     
+    if INSTALLED:
+        def debug_pass(self):
+            pass
+        def draw_debug_vector(self, start : vec3, end : vec3, color=(255,0,0), immediate=False):
+            pass
+        def draw_debug_spring(self, start : vec3, end : vec3, color=(255,0,0), immediate=False):
+            pass
+        def draw_debug_rectangle(self, start : vec2, end : vec2, color=(0,0,255), immediate=False, thickness=1):
+            pass
+        def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1):
+            pass
+    else:
+        def debug_pass(self):
+            if not self._no_debug:
+                for debug in self._frame_debugs:
+                    debug.draw(self.screen)
+                self._frame_debugs = []
+                current_height = 10
+                self.debug_infos["fps"] = str(round(self._clock.get_fps()))
+                self.debug_infos["deltatime"] = str(round(self._clock.get_time(), 1))
+                for debug in self.debug_infos:
+                    txt = str(debug) + ": " + str(self.debug_infos[debug])
+                    img = self._fonts["debug_default"].render(txt, True, (255, 255, 255))
+                    rect = img.get_rect()
+                    self.screen.blit(img, (self.size[0]-rect.width-10, current_height))
+                    current_height+=rect.height+5
+
+        def draw_debug_vector(self, start : vec3, end : vec3, color=(255,0,0), immediate=False):
+            if self._no_debug: return
+            vector = DebugVector(self)
+            vector.start = start
+            vector.end = end
+            vector.color = color
+            if immediate:
+                vector.draw(self.screen)
+            else:
+                self._frame_debugs.append(vector)
+            
+        def draw_debug_spring(self, start : vec3, end : vec3, color=(255,0,0), immediate=False):
+            if self._no_debug: return
+            spring = DebugSpring(self)
+            spring._start = start
+            spring._end = end
+            spring._color = color
+            if immediate:
+                spring.draw(self.screen)
+            else:
+                self._frame_debugs.append(spring)
+            
+        def draw_debug_rectangle(self, start : vec2, end : vec2, color=(0,0,255), immediate=False, thickness=1):
+            if self._no_debug: return
+            square = DebugRectangle(self)
+            square.start = start
+            square.end = end
+            square.color = color
+            square.thickness = thickness
+            if immediate:
+                square.draw(self.screen)
+            else:
+                self._frame_debugs.append(square)
+
+        def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1):
+            if self._no_debug: return
+            square = DebugBox(self)
+            square.start = start
+            square.end = end
+            square.color = color
+            square.thickness = thickness
+            if immediate:
+                square.draw(self.screen)
+            else:
+                self._frame_debugs.append(square)
+    
     def end_frame(self):
         self._delta_time = self._clock.get_time()
-        if not self._no_debug:
-            for debug in self._frame_debugs:
-                debug.draw(self.screen)
-            self._frame_debugs = []
-            current_height = 10
-            self.debug_infos["fps"] = str(round(self._clock.get_fps()))
-            self.debug_infos["deltatime"] = str(round(self._clock.get_time(), 1))
-            for debug in self.debug_infos:
-                txt = str(debug) + ": " + str(self.debug_infos[debug])
-                img = self._fonts["debug_default"].render(txt, True, (255, 255, 255))
-                rect = img.get_rect()
-                self.screen.blit(img, (self.size[0]-rect.width-10, current_height))
-                current_height+=rect.height+5
+        self.debug_pass()
         
         pygame.display.flip()
         self._clock.tick(self._target_fps)
         return
     
-    def draw_debug_vector(self, start : vec3, end : vec3, color=(255,0,0), immediate=False):
-        if self._no_debug: return
-        vector = DebugVector(self)
-        vector.start = start
-        vector.end = end
-        vector.color = color
-        if immediate:
-            vector.draw(self.screen)
-        else:
-            self._frame_debugs.append(vector)
-        
-    def draw_debug_spring(self, start : vec3, end : vec3, color=(255,0,0), immediate=False):
-        if self._no_debug: return
-        spring = DebugSpring(self)
-        spring._start = start
-        spring._end = end
-        spring._color = color
-        if immediate:
-            spring.draw(self.screen)
-        else:
-            self._frame_debugs.append(spring)
-        
-    def draw_debug_rectangle(self, start : vec2, end : vec2, color=(0,0,255), immediate=False, thickness=1):
-        if self._no_debug: return
-        square = DebugRectangle(self)
-        square.start = start
-        square.end = end
-        square.color = color
-        square.thickness = thickness
-        if immediate:
-            square.draw(self.screen)
-        else:
-            self._frame_debugs.append(square)
-
-    def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1):
-        if self._no_debug: return
-        square = DebugBox(self)
-        square.start = start
-        square.end = end
-        square.color = color
-        square.thickness = thickness
-        if immediate:
-            square.draw(self.screen)
-        else:
-            self._frame_debugs.append(square)
     
     def load_scene(self, scene:'Scene'):
         self.active_scene = scene
@@ -767,7 +800,7 @@ class OrthographicCamera(Camera):
         Camera.__init__(self)
         self.offset = vec2(0.5, 0.5)                    # Camera center is...centered
         self.aspect_ratio = 1
-        self.bounds = vec2(20./self.aspect_ratio, 20.)
+        self.bounds = vec2(5./self.aspect_ratio, 5.)
         self.screen_size = vec2(640, 480)
     
     def update_screen_size(self, size : vec2) -> None:
@@ -1045,11 +1078,11 @@ class Scene:
         self._objects : List[SceneComponent] = []
         self.manual_rendering : bool = False
         self.active_camera : Camera = OrthographicCamera() # type: ignore
-        self._drawables : list = []
+        self._drawables : SortedList = SortedList()
         self._tilemaps : list[Tilemap] = []
         self._tilesets : list[Tileset] = []
         self._backgrounds : list[SpriteComponent] = []
-        self._ambient_light = vec3(1., 1., 1.)*0.5
+        self._ambient_light = vec3(1., 1., 1.)
         self._lights : list[Light] = []
         self._lightmap : pygame.Surface = pygame.surface.Surface(vec2(10, 10))
     
@@ -1413,6 +1446,7 @@ class Pawn(Actor):
         self.shadow.size = vec3(10, 10, 10)
         self.shadow.set_inherit_parent_location(False)
         self.shadow.set_draw_offset(vec2(0, 5))
+        self.shadow.set_size(vec3(1, 1, 0))
         self.character = SpriteComponent(self.root, image_name=image_name)
     
     def update(self):        
