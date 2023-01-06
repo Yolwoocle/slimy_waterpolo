@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pygame
+import pygame_gui
 from sortedcontainers import SortedList, SortedDict
 
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -27,12 +28,14 @@ try:
 except:
     pass
 
+# Basic definitions
 vec2 = pygame.math.Vector2
 vec3 = pygame.math.Vector3
 vec  = vec2|vec3
 
 sqrt2 = math.sqrt(2)
 
+# Helpers
 def random_vec3_in_sphere(origin : vec3, radius : float) -> vec3:
     dir = vec3(2*random.random()-1, 2*random.random()-1, 2*random.random()-1)/sqrt2
     return origin + radius*dir
@@ -91,39 +94,20 @@ def color_from_vec3(vector:vec3) -> pygame.Color:
 def generate_radial_gradient(color1:vec3, alpha1:int, color2:vec3, alpha2:int, size:vec2=vec2(512, 512)):
     temp_surface = pygame.Surface(size, pygame.SRCALPHA)
 
-    # use this to set the amount of 'segments' we rotate our blend into
-    # this helps stop blends from looking 'boxy' or like a cross.
     circular_smoothness_steps = 5
 
     colour_1 = pygame.Color((int(color1.x), int(color1.y), int(color1.z), alpha1))
-    colour_1.r = colour_1.r//circular_smoothness_steps
-    colour_1.g = colour_1.g//circular_smoothness_steps
-    colour_1.b = colour_1.b//circular_smoothness_steps
-    colour_1.a = colour_1.a//circular_smoothness_steps
+    colour_1.r, colour_1.g = colour_1.r//circular_smoothness_steps, colour_1.g//circular_smoothness_steps
+    colour_1.b, colour_1.a = colour_1.b//circular_smoothness_steps, colour_1.a//circular_smoothness_steps
 
     colour_2 = pygame.Color((int(color2.x), int(color2.y), int(color2.z), alpha2))
-    colour_2.r = colour_2.r//circular_smoothness_steps
-    colour_2.g = colour_2.g//circular_smoothness_steps
-    colour_2.b = colour_2.b//circular_smoothness_steps
-    colour_2.a = colour_2.a//circular_smoothness_steps
-
+    colour_2.r, colour_2.g = colour_2.r//circular_smoothness_steps, colour_2.g//circular_smoothness_steps
+    colour_2.b, colour_2.a = colour_2.b//circular_smoothness_steps, colour_2.a//circular_smoothness_steps
 
     # 3x3 - starter
     radial_grad_starter = pygame.Surface((3, 3), pygame.SRCALPHA)
     radial_grad_starter.fill(colour_1)
     radial_grad_starter.fill(colour_2, pygame.Rect(1, 1, 1, 1))
-
-    # 5x5 - starter
-    # radial_grad_starter = pygame.Surface((5, 5))
-    # radial_grad_starter.fill((0, 0, 0))
-    # radial_grad_starter.fill((255//circular_smoothness_steps,
-    #                           255//circular_smoothness_steps,
-    #                           255//circular_smoothness_steps), pygame.Rect(2, 1, 1, 3))
-    # radial_grad_starter.fill((255//circular_smoothness_steps,
-    #                           255//circular_smoothness_steps,
-    #                           255//circular_smoothness_steps), pygame.Rect(1, 2, 3, 1))
-
-
     radial_grad = pygame.transform.smoothscale(radial_grad_starter, size)
 
     for i in range(0, circular_smoothness_steps):
@@ -136,15 +120,51 @@ def generate_radial_gradient(color1:vec3, alpha1:int, color2:vec3, alpha2:int, s
         temp_surface.blit(radial_grad_rot, pos_rect,
                         area=area_rect,
                         special_flags=pygame.BLEND_RGBA_ADD)
-
-    # final_pos_rect = pygame.Rect((0, 0), (512, 512))
-    # final_pos_rect.center = 400, 400
     return temp_surface
 
+def get_image_size_tuple(size):
+    if size==None:
+        return None
+    elif type(size)==list and len(size)==2:
+        return (size[0], size[1])
+    elif type(size)==vec2 and len(size)==2:
+        return (size[0], size[1])
+    elif type(size)==tuple and len(size)==2:
+        return size
+    raise RuntimeError("Unknown type for image size")
 
-def dt_to_seconds(dt:float) -> int:
-    return int(dt*1E6)
+# Debug log
+class logTypes:
+    """
+    Log types
+    """
+    info = colorit.Colors.green
+    timer = colorit.Colors.blue
+    warning = colorit.Colors.yellow
+    error = colorit.Colors.red
+    trace = colorit.Colors.white
 
+def log(msg, type:Tuple[int, int, int]=logTypes.info) -> None:
+    """
+    Log the data
+    """
+    pretext = "[WARN]" if type==logTypes.warning else "[INFO]" if type==logTypes.info or type==logTypes.trace else "[TIME]" if type==logTypes.timer else "[ERRO]"
+    print(colorit.color(pretext+" {}".format(msg), type))
+
+def log_newline() -> None:
+    """
+    Log a new line
+    """
+    print("")
+
+def logf(frame: int, target_frame: int, *args, **kwargs) -> None:
+    """
+    Log if target_frame matches frame
+    """
+    if frame==target_frame:
+        log(*args, **kwargs)
+
+# Basic classes
 class MutableBool:
     def __init__(self, val:bool) -> None:
         self._val = val
@@ -225,39 +245,11 @@ class Colors:
     green       = (0, 255, 0)
     red         = (255, 0, 0)
     darkgreen   = (150, 215, 140)
+    darkblue    = (0, 0, 88)
+
+    darkgrey    = (42, 42, 42)
 
     white_a     = (255, 255, 255, 255)
-
-class logTypes:
-    """
-    Log types
-    """
-    info = colorit.Colors.green
-    timer = colorit.Colors.blue
-    warning = colorit.Colors.yellow
-    error = colorit.Colors.red
-    trace = colorit.Colors.white
-
-def log(msg, type:Tuple[int, int, int]=logTypes.info) -> None:
-    """
-    Log the data
-    """
-    pretext = "[WARN]" if type==logTypes.warning else "[INFO]" if type==logTypes.info or type==logTypes.trace else "[TIME]" if type==logTypes.timer else "[ERRO]"
-    print(colorit.color(pretext+" {}".format(msg), type))
-
-def log_newline() -> None:
-    """
-    Log a new line
-    """
-    print("")
-
-def logf(frame: int, target_frame: int, *args, **kwargs) -> None:
-    """
-    Log if target_frame matches frame
-    """
-    if frame==target_frame:
-        log(*args, **kwargs)
-
 
 class Math:
     @staticmethod
@@ -329,7 +321,7 @@ class Rect3d:
     @property
     def size_z(self):
         return abs(self._end.y-self._begin.y)
-        
+
 
 class Image:
     def __init__(self, name, size, path:str="", data:pygame.Surface|None=None, flags:int=0):
@@ -445,7 +437,7 @@ class Tilemap:
         m, n = self.map.shape
         return m
 
-
+"""
 def import_tiled_tilemap(name:str, path:str, tileset:Tileset) -> Tilemap:
     data = None
     with open(path) as f:
@@ -461,23 +453,23 @@ def import_tiled_tilemap(name:str, path:str, tileset:Tileset) -> Tilemap:
     tm.map = map
     tm.compute()
     return tm
+"""
 
 
-def get_image_size_tuple(size):
-    if size==None:
-        return None
-    elif type(size)==list and len(size)==2:
-        return (size[0], size[1])
-    elif type(size)==vec2 and len(size)==2:
-        return (size[0], size[1])
-    elif type(size)==tuple and len(size)==2:
-        return size
-    raise RuntimeError("Unknown type for image size")
+# Main classes
+class Object:
+    def __init__(self):
+        self._delete_me = False
+
+class Globals:
+    game : 'Game' = None  # type: ignore
+    # world : 'World' = None # type: ignore
 
 class Game:
     def __init__(self, size:tuple[int, int]=(640, 480)):
         if Globals.game: raise RuntimeError("There can exist only one game")
         Globals.game = self
+        self._world = World()
         self.size = size
         self.title = ""
         self._fonts : dict[str, pygame.font.Font] = {}
@@ -507,7 +499,14 @@ class Game:
         self.load_image("default_shadow", "data/default_shadow.png")
         self.load_image("default_particle", "data/default_particle.png")
 
+        self._gui_manager:pygame_gui.UIManager = pygame_gui.UIManager(self.size)
+        self._gui_refs:dict[pygame_gui.core.UIElement, Widget]={}
+
         return self
+    
+    def quit(self) -> bool:
+        self._alive=False
+        return True
     
     def load_font(self, name, path, size=28, force_reload=False):
         if (not self._fonts.get(name)) or force_reload:
@@ -551,6 +550,16 @@ class Game:
         self._images[name] = {}
         self._images[name][s] = img
         return img
+    
+    def get_world(self) -> 'World':
+        return self._world
+    
+    def set_world(self, world:'World') -> 'Game':
+        self._world = world
+        return self
+    
+    def get_ui_manager(self) -> pygame_gui.UIManager:
+        return self._gui_manager
 
     def is_alive(self):
         return self._alive
@@ -570,13 +579,15 @@ class Game:
     def update_size(self) -> None:
         self.camera.update_screen_size(self.size)
         self.active_scene.update_screen_size(self.size)
+        self._gui_manager.set_window_resolution(self.size)
     
-    def on_resize(self, event):
+    def on_resize(self, event:pygame.event.Event):
         self.size = (event.dict['size'][0], event.dict['size'][1])
         self.update_size()
         pass
     
     def begin_frame(self, dont_clear=False):
+        self._delta_time = self._clock.tick(self._target_fps) / 1000.0
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
@@ -584,8 +595,20 @@ class Game:
             if event.type == pygame.VIDEORESIZE:
                 self.on_resize(event)
                 pygame.display.update()
+            if event.type == pygame_gui.UI_BUTTON_PRESSED:
+                if self._gui_refs.get(event.ui_element):
+                    self._gui_refs[event.ui_element].on_click()
+            self._gui_manager.process_events(event)
+            
         if not dont_clear:
             self.screen.fill(self._background_color)
+    
+    def tick(self):
+        # self._delta_time = self._clock.get_time()
+        self._gui_manager.update(self._delta_time)
+        self.debug_pass()
+        self._world.tick(self._delta_time)
+        self._gui_manager.draw_ui(self.screen)
     
     if INSTALLED:
         def debug_pass(self):
@@ -596,7 +619,7 @@ class Game:
             pass
         def draw_debug_rectangle(self, start : vec2, end : vec2, color=(0,0,255), immediate=False, thickness=1):
             pass
-        def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1):
+        def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1, offset:None|vec2=None):
             pass
     else:
         def debug_pass(self):
@@ -648,22 +671,20 @@ class Game:
             else:
                 self._frame_debugs.append(square)
 
-        def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1):
+        def draw_debug_box(self, start : vec3, end : vec3, color=(0,0,255), immediate=False, thickness=1, offset:None|vec2=None):
             if self._no_debug: return
             square = DebugBox(self)
             square.start = start
             square.end = end
             square.color = color
             square.thickness = thickness
+            square.offset = offset if offset else vec2()
             if immediate:
                 square.draw(self.screen)
             else:
                 self._frame_debugs.append(square)
     
-    def end_frame(self):
-        self._delta_time = self._clock.get_time()
-        self.debug_pass()
-        
+    def end_frame(self):        
         pygame.display.flip()
         self._clock.tick(self._target_fps)
         return
@@ -682,9 +703,174 @@ class Game:
     def camera(self) -> 'Camera':
         return self.active_scene.active_camera
 
-class Object:
+class World:
+    def __init__(self) -> None:
+        self._current_scene:Scene|None = None
+        self._physics_world:PhysicsWorld|None = None
+    
+    def get_current_scene(self) -> 'Scene':
+        return self._current_scene
+
+    def load_scene(self, scene:'Scene') -> 'World':
+        self._current_scene = scene
+        return self
+    
+    def get_physics_world(self) -> 'PhysicsWorld':
+        return self._physics_world
+    
+    def enable_physics(self) -> 'World':
+        self._physics_world = PhysicsWorld()
+        return self
+    
+    def tick(self, delta_time:float):
+        if self._physics_world is not None:
+            self._physics_world.tick()
+        if self._current_scene is not None:
+            self._current_scene.update()
+            self._current_scene.draw()
+            self._current_scene.light_pass()
+
+class Scene:
     def __init__(self):
-        self._delete_me = False
+        self._objects : List[SceneComponent] = []
+        self.manual_rendering : bool = False
+        self.active_camera : Camera = OrthographicCamera() # type: ignore
+        self._drawables : SortedList = SortedList()
+        self._tilemaps : list[Tilemap] = []
+        self._tilesets : list[Tileset] = []
+        self._backgrounds : list[SpriteComponent] = []
+        self._ambient_light = vec3(1., 1., 1.)
+        self._lights : list[Light] = []
+        self._lightmap : pygame.Surface = pygame.surface.Surface(vec2(10, 10))
+    
+    def add_drawable_rec(self, obj : 'SceneComponent'):
+        if issubclass(type(obj), DrawableComponent):
+            self._drawables.add(obj)
+        if obj.any_child():
+            for child in obj.children:
+                if issubclass(type(child), SceneComponent):
+                    self.add_drawable_rec(child) # type: ignore
+    
+    def register_component(self, component : 'SceneComponent'):
+        self._objects.append(component) # Add only the root component
+        self.add_drawable_rec(component)
+        return self
+    
+    def register_light(self, light:'Light'):
+        self._lights.append(light)
+        light._scene = self
+        return self
+    
+    def update_screen_size(self, size:vec2):
+        for light in self._lights:
+                light.render()
+    
+    def draw(self):
+        if not self.manual_rendering:
+            for background in self._backgrounds:
+                background.draw()
+            for obj in self._drawables:
+                obj.draw()
+    
+    def set_ambient_light(self, val:vec3):
+        self._ambient_light = val
+        return self
+    
+    def light_pass(self):
+        if self._lightmap.get_size()!=Globals.game.size:
+            self._lightmap = pygame.surface.Surface(Globals.game.size)
+        self._lightmap.fill(color_from_vec3(self._ambient_light*255))
+        if not self.manual_rendering:
+            for light in self._lights:
+                light.draw()
+            
+            Globals.game.screen.blit(self._lightmap, (0, 0), special_flags=pygame.BLEND_MULT)
+    
+    def update(self):
+        for obj in self._objects:
+            obj.update()
+    
+    def clear(self):
+        self._backgrounds.clear()
+    
+
+    def load_map(self, name:str, path:str) -> list['SpriteComponent']:
+        sprites = []
+        data = None
+        with open(path) as f:
+            data=json.load(f)
+        d_tilesets = data["tilesets"]
+        d_layers = data["layers"]
+        log("Loading map with:")
+        log(" => {} tileset{}".format(len(d_tilesets), "s" if len(d_tilesets)>1 else ""))
+        i=0
+        tw = data["tilewidth"]
+        th = data["tileheight"]
+        for tileset in d_tilesets:
+            ts = Tileset(name+"_"+str(i), replace_extension(tileset["source"], "png"), int(data["tilewidth"]), int(data["tileheight"]))
+            ts._start_index = tileset["firstgid"]
+            self._tilesets.append(ts)
+            i+=1
+        
+        for layer in d_layers:
+            width = int(layer["width"])
+            height = int(layer["height"])
+            size = vec2(width, height)
+            map = np.array(layer["data"])
+            map = map.reshape(height, width)
+            tm = Tilemap(name, self._tilesets, size, vec2(tw, th))
+            tm.map = map
+            tm.compute()
+            self._tilemaps.append(tm)
+            map_sprite = SpriteComponent(None, vec3(2, 2, 0), vec2(0, 0))
+            map_sprite.size = vec3(tm.width*2, tm.height*2, 0)
+            map_sprite.sprite = tm.image
+            map_sprite._size_locked = True
+            sprites.append(map_sprite)
+            self._backgrounds.append(map_sprite)
+        
+        return sprites
+    
+    def get_light_map(self) -> pygame.Surface:
+        return self._lightmap
+
+class Level:
+    def __init__(self) -> None:
+        pass
+
+class Event:
+    def __init__(self):
+        self.consumed = False
+
+
+class Actor(Object):
+    def __init__(self, pos:vec3|None=None):
+        Object.__init__(self)
+        self._root:SceneComponent = SceneComponent(None, pos)
+    
+    @property
+    def root(self) -> 'SceneComponent':
+        return self._root
+    
+    def tick(self, dt:float):
+        pass
+
+class Pawn(Actor):
+    def __init__(self, pos:vec3|None=None, image_name:str="default"):
+        Actor.__init__(self, pos=pos)
+        self._root:PhysicsComponent = PhysicsComponent(None, pos=pos, mass=0.1)
+        self.shadow = SpriteComponent(self.root, image_name="default_shadow")
+        self.shadow.size = vec3(10, 10, 10)
+        self.shadow.set_inherit_parent_location(False)
+        self.shadow.set_draw_offset(vec2(0, 5))
+        self.shadow.set_size(vec3(1, 1, 0))
+        self.character = SpriteComponent(self.root, image_name=image_name)
+    
+    def tick(self, dt:float):
+        Actor.tick(self, dt)
+        self._root.apply_force(GravityForce(-9.81)).apply_force(FrictionForce())
+        self.shadow._pos = vec3(self.root.get_world_position().x, self.root.get_world_position().y, Globals.world.line_trace(self.root.get_local_position(), vec3(0, 0, -1)).z)
+
 
 class Component:
     def __init__(self, parent:Union[None,'Component']=None) -> None:
@@ -1040,11 +1226,12 @@ class DebugBox(DebugDraw):
         self.end:vec3 = vec3()
         self.color:Colors.Color = Colors.Color(255, 0, 0)
         self.thickness = 1
+        self.offset:vec2 = vec2()
     
     def draw(self, screen):
         DebugDraw.draw(self, screen)
-        s2d = self.game.camera.world_to_screen(self.start)
-        e2d = self.game.camera.world_to_screen(self.end)
+        s2d = self.game.camera.world_to_screen(self.start)+self.offset
+        e2d = self.game.camera.world_to_screen(self.end)+self.offset
         if self.start==self.end: return
         pygame.draw.rect(screen, self.color, pygame.Rect(s2d.x, s2d.y, e2d.x-s2d.x, e2d.y-s2d.y), self.thickness)
 
@@ -1074,121 +1261,6 @@ class DebugSpring(DebugDraw):
             pygame.draw.lines(screen, self._color, False, [camera.world_to_screen(offset+i*stride*unit), camera.world_to_screen(offset+i*stride*unit+stride/2*unit+(width*side if i%2 else -width*side)), camera.world_to_screen(offset+(i+1)*stride*unit)])
         pygame.draw.line(screen, self._color, camera.world_to_screen(self._end-unit*ends_length), camera.world_to_screen(self._end), self._thickness)
 
-class Scene:
-    def __init__(self):
-        self._objects : List[SceneComponent] = []
-        self.manual_rendering : bool = False
-        self.active_camera : Camera = OrthographicCamera() # type: ignore
-        self._drawables : SortedList = SortedList()
-        self._tilemaps : list[Tilemap] = []
-        self._tilesets : list[Tileset] = []
-        self._backgrounds : list[SpriteComponent] = []
-        self._ambient_light = vec3(1., 1., 1.)
-        self._lights : list[Light] = []
-        self._lightmap : pygame.Surface = pygame.surface.Surface(vec2(10, 10))
-    
-    def add_drawable_rec(self, obj : SceneComponent):
-        if issubclass(type(obj), DrawableComponent):
-            self._drawables.add(obj)
-        if obj.any_child():
-            for child in obj.children:
-                if issubclass(type(child), SceneComponent):
-                    self.add_drawable_rec(child) # type: ignore
-    
-    def register_component(self, component : SceneComponent):
-        self._objects.append(component) # Add only the root component
-        self.add_drawable_rec(component)
-        return self
-    
-    def register_light(self, light:Light):
-        self._lights.append(light)
-        light._scene = self
-        return self
-    
-    def update_screen_size(self, size:vec2):
-        for light in self._lights:
-                light.render()
-    
-    def draw(self):
-        if not self.manual_rendering:
-            for background in self._backgrounds:
-                background.draw()
-            for obj in self._drawables:
-                obj.draw()
-    
-    def set_ambient_light(self, val:vec3):
-        self._ambient_light = val
-        return self
-    
-    def light_pass(self):
-        if self._lightmap.get_size()!=Globals.game.size:
-            self._lightmap = pygame.surface.Surface(Globals.game.size)
-        self._lightmap.fill(color_from_vec3(self._ambient_light*255))
-        if not self.manual_rendering:
-            for light in self._lights:
-                light.draw()
-            
-            Globals.game.screen.blit(self._lightmap, (0, 0), special_flags=pygame.BLEND_MULT)
-    
-    def update(self):
-        for obj in self._objects:
-            obj.update()
-    
-    def clear(self):
-        self._backgrounds.clear()
-    
-
-    def load_map(self, name:str, path:str) -> list['SpriteComponent']:
-        sprites = []
-        data = None
-        with open(path) as f:
-            data=json.load(f)
-        d_tilesets = data["tilesets"]
-        d_layers = data["layers"]
-        log("Loading map with:")
-        log(" => {} tileset{}".format(len(d_tilesets), "s" if len(d_tilesets)>1 else ""))
-        i=0
-        tw = data["tilewidth"]
-        th = data["tileheight"]
-        for tileset in d_tilesets:
-            ts = Tileset(name+"_"+str(i), replace_extension(tileset["source"], "png"), int(data["tilewidth"]), int(data["tileheight"]))
-            ts._start_index = tileset["firstgid"]
-            self._tilesets.append(ts)
-            i+=1
-        
-        for layer in d_layers:
-            width = int(layer["width"])
-            height = int(layer["height"])
-            size = vec2(width, height)
-            map = np.array(layer["data"])
-            map = map.reshape(height, width)
-            tm = Tilemap(name, self._tilesets, size, vec2(tw, th))
-            tm.map = map
-            tm.compute()
-            self._tilemaps.append(tm)
-            map_sprite = SpriteComponent(None, vec3(2, 2, 0), vec2(0, 0))
-            map_sprite.size = vec3(tm.width*2, tm.height*2, 0)
-            map_sprite.sprite = tm.image
-            map_sprite._size_locked = True
-            sprites.append(map_sprite)
-            self._backgrounds.append(map_sprite)
-        
-        return sprites
-    
-    def get_light_map(self) -> pygame.Surface:
-        return self._lightmap
-
-class Level:
-    def __init__(self) -> None:
-        pass
-
-class Event:
-    def __init__(self):
-        self.consumed = False
-
-class Globals:
-    game : Game = None  # type: ignore
-    world : 'PhysicsWorld' = None # type: ignore
 
 class PhysicsWorld:
     def __init__(self):
@@ -1307,9 +1379,10 @@ class Solver:
         pass
 
 class PhysicsComponent(DrawableComponent, SceneComponent):
-    def __init__(self, parent, world : PhysicsWorld, pos=None, mass:float=1):
+    def __init__(self, parent, pos=None, mass:float=1, world:None|World=None):
         SceneComponent.__init__(self, parent, pos)
-        self.world : PhysicsWorld = world
+        self._physics_world : PhysicsWorld = world.get_physics_world() if world else Globals.game.get_world().get_physics_world()
+        print(Globals.game.get_world().get_physics_world())
         self.mass = mass
         self.vel = vec3()
         self.acc = vec3()
@@ -1320,7 +1393,7 @@ class PhysicsComponent(DrawableComponent, SceneComponent):
         self._forces:list[Force] = []
         self._forces_count:int   = 0
 
-        world.register_physics_component(self)
+        self._physics_world.register_physics_component(self)
     
     @SceneComponent.size.setter
     def size(self, s):
@@ -1353,7 +1426,7 @@ class PhysicsComponent(DrawableComponent, SceneComponent):
         for f in self._forces:
             force = f.get(self)
             self.acc += force
-            Globals.game.draw_debug_vector(Globals.game.camera.world_to_screen(self._pos), Globals.game.camera.world_to_screen(self._pos+0.1*force))
+            Globals.game.draw_debug_vector(self.get_world_position(), self.get_world_position()+0.1*force)
 
         self._forces_count = 0
         self.acc /= self.mass
@@ -1363,46 +1436,46 @@ class PhysicsComponent(DrawableComponent, SceneComponent):
         vel = self.vel * dt
 
         if vel.x<0:
-            if self._pos.x+vel.x>self.world.limits[0].x:
+            if self._pos.x+vel.x>self._physics_world.limits[0].x:
                 self._pos.x += vel.x
             else:
                 self.vel.x = 0
-                self._pos.x = self.world.limits[0].x
+                self._pos.x = self._physics_world.limits[0].x
         
         if vel.x>0:
-            if self._pos.x+vel.x<self.world.limits[1].x:
+            if self._pos.x+vel.x<self._physics_world.limits[1].x:
                 self._pos.x += vel.x
             else: 
                 self.vel.x = 0
-                self._pos.x = self.world.limits[1].x
+                self._pos.x = self._physics_world.limits[1].x
         
         if vel.y<0:
-            if self._pos.y+vel.y>self.world.limits[0].y:
+            if self._pos.y+vel.y>self._physics_world.limits[0].y:
                 self._pos.y += vel.y
             else:
                 self.vel.y = 0
-                self._pos.y = self.world.limits[0].y
+                self._pos.y = self._physics_world.limits[0].y
         
         if vel.y>0:
-            if self._pos.y+vel.y<self.world.limits[1].y:
+            if self._pos.y+vel.y<self._physics_world.limits[1].y:
                 self._pos.y += vel.y
             else:
                 self.vel.y = 0
-                self._pos.y = self.world.limits[1].y
+                self._pos.y = self._physics_world.limits[1].y
 
         if vel.z<0:
-            if self._pos.z+vel.z>self.world.limits[0].z:
+            if self._pos.z+vel.z>self._physics_world.limits[0].z:
                 self._pos.z += vel.z
             else:
                 self.vel.z = 0
-                self._pos.z = self.world.limits[0].z
+                self._pos.z = self._physics_world.limits[0].z
         
         if vel.z>0:
-            if self._pos.z+vel.z<self.world.limits[1].z:
+            if self._pos.z+vel.z<self._physics_world.limits[1].z:
                 self._pos.z += vel.z
             else:
                 self.vel.z = 0
-                self._pos.z = self.world.limits[1].z
+                self._pos.z = self._physics_world.limits[1].z
         
         Globals.game.draw_debug_vector(self._pos, self._pos+0.1*self.vel, (10,255,10))
         # Globals.game.draw_debug_box(self._pos-set_z(self.size/2, 0), self._pos+set_z(self.size/2, 0), (0, 0, 255), thickness=1)
@@ -1414,14 +1487,14 @@ class SpriteComponent(DrawableComponent):
         self.draw_size = size
         self.sprite = Globals.game.load_image(image_name, size=self.draw_size)
         self._size_locked = False
-        self._draw_offset = vec2()
+        self._draw_offset:vec2 = vec2()
     
     def draw(self):
         Drawable.draw(self)
         if self.sprite:
             draw_pos = Globals.game.camera.world_to_screen(self.get_world_position())
             self.draw_size = Globals.game.camera.world_size2_to_screen(self.size.xy)
-            Globals.game.draw_debug_box(self.get_world_position()-self.size/2, self.get_world_position()+self.size/2, (0, 255, 100))
+            Globals.game.draw_debug_box(self.get_world_position()-self.size/2, self.get_world_position()+self.size/2, (0, 255, 100), offset=self._draw_offset)
             if self.sprite.size!=self.draw_size:
                 if (not self._size_locked):
                     # log("Size if wrong, reloading sprite", logTypes.warning)
@@ -1434,35 +1507,57 @@ class SpriteComponent(DrawableComponent):
         self._draw_offset = offset
 
 
-class Actor(Object):
-    def __init__(self, pos:vec3|None=None):
-        Object.__init__(self)
-        self._root:SceneComponent = SceneComponent(None, pos)
+
+class Widget:
+    def __init__(self, parent, pos:None|vec2=None, size:None|vec2=None, color=vec3(255, 255, 255)):
+        self._parent = parent
+        self._pos:vec2 = pos if pos else vec2()
+        self._size:vec2 = size if size else vec2()
+        self._color = color
+        self._children:list[Widget] = []
+        self._visible = True
     
-    @property
-    def root(self) -> SceneComponent:
-        return self._root
+    def register(self):
+        pass
     
-    def tick(self, dt:float):
+    def debug_draw(self):
+        if self._visible:
+            Globals.game.draw_debug_box(self._pos, self._pos+self._size, self._color)
+            for child in self._children:
+                child.debug_draw()
+    def on_click(self):
         pass
 
-class Pawn(Actor):
-    def __init__(self, world:PhysicsWorld, pos:vec3|None=None, image_name:str="default"):
-        Actor.__init__(self, pos=pos)
-        self._root:PhysicsComponent = PhysicsComponent(None, world,pos=pos, mass=0.1)
-        self.shadow = SpriteComponent(self.root, image_name="default_shadow")
-        self.shadow.size = vec3(10, 10, 10)
-        self.shadow.set_inherit_parent_location(False)
-        self.shadow.set_draw_offset(vec2(0, 5))
-        self.shadow.set_size(vec3(1, 1, 0))
-        self.character = SpriteComponent(self.root, image_name=image_name)
+class Button(Widget):
+    def __init__(self, parent, pos:None|vec2=None, size:None|vec2=None, color=vec3(255, 255, 255), text=""):
+        Widget.__init__(self, parent, pos, size, color)
+        self._text = text
+        self._text_color = vec3(0, 0, 0)
+        self._text_size = 1
+        self._callback = None
+        self._button:None|pygame_gui.elements.UIButton = None
     
-    def tick(self, dt:float):
-        Actor.tick(self, dt)
-        self._root.apply_force(GravityForce(-9.81)).apply_force(FrictionForce())
-        log(self.root.get_world_position())
-        self.shadow._pos = vec3(self.root.get_world_position().x, self.root.get_world_position().y, Globals.world.line_trace(self.root.get_local_position(), vec3(0, 0, -1)).z)
-
+    def register(self) -> 'Button':
+        relative_rect = pygame.Rect(self._pos.x, self._pos.y, self._size.x, self._size.y)
+        self._button = pygame_gui.elements.UIButton(relative_rect=relative_rect,
+                                            text=self._text,
+                                            manager=Globals.game.get_ui_manager(),
+                                            anchors={"left": "left", "centery":"centery"})
+        Globals.game._gui_refs[self._button]=self
+        # Globals.game.get_ui_manager().set_visual_debug_mode(True)
+        # log(f"{}")
+        return self
+    
+    def set_callback(self, callback) -> 'Button':
+        self._callback = callback
+        return self
+    
+    def on_click(self):
+        if self._callback:
+            self._callback()
+    
+    def is_valid(self):
+        return self._button!=None
 
 def testSlimyEngine():
     pass
