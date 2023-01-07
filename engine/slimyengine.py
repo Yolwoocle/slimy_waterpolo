@@ -9,6 +9,8 @@ from collections import deque
 import numpy as np
 import json
 from pathlib import Path
+import socket
+import threading
 
 import pygame
 import pygame_gui
@@ -460,6 +462,7 @@ def import_tiled_tilemap(name:str, path:str, tileset:Tileset) -> Tilemap:
 class Object:
     def __init__(self):
         self._delete_me = False
+        self._reflected = False
 
 class Globals:
     game : 'Game' = None  # type: ignore
@@ -481,6 +484,8 @@ class Game:
         self._events = []
         self._images = {}
         self.active_scene : Scene = Scene()
+        
+        self._running_threads:List['StoppableThread'] = []
 
         self._frame_debugs = []
         self.debug_infos:dict[str, str] = {"fps": "0", "deltatime": "0"}
@@ -506,7 +511,22 @@ class Game:
     
     def quit(self) -> bool:
         self._alive=False
+        pygame.quit()
+        log("Closing opened threads")
+        self.kill_threads()
         return True
+    
+    def kill_threads(self) -> None:
+        log("Killing threads...", logTypes.warning)
+        for thread in self._running_threads:
+            if thread.is_alive():
+                thread.join(0.2)
+                thread.stop()
+        self._running_threads.clear()
+
+    def register_thread(self, thread:'StoppableThread') -> 'Game':
+        self._running_threads.append(thread)
+        return self
     
     def load_font(self, name, path, size=28, force_reload=False):
         if (not self._fonts.get(name)) or force_reload:
@@ -587,11 +607,13 @@ class Game:
         pass
     
     def begin_frame(self, dont_clear=False):
+        if not self._alive: return
         self._delta_time = self._clock.tick(self._target_fps) / 1000.0
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
-                self._alive = False
+                self.quit()
+                return
             if event.type == pygame.VIDEORESIZE:
                 self.on_resize(event)
                 pygame.display.update()
@@ -604,6 +626,7 @@ class Game:
             self.screen.fill(self._background_color)
     
     def tick(self):
+        if not self._alive: return
         # self._delta_time = self._clock.get_time()
         self._gui_manager.update(self._delta_time)
         self.debug_pass()
@@ -684,7 +707,8 @@ class Game:
             else:
                 self._frame_debugs.append(square)
     
-    def end_frame(self):        
+    def end_frame(self):
+        if not self._alive: return        
         pygame.display.flip()
         self._clock.tick(self._target_fps)
         return
@@ -838,10 +862,79 @@ class Level:
     def __init__(self) -> None:
         pass
 
+
+# Networking
+class StoppableThread(threading.Thread):
+    def __init__(self) -> None:
+        threading.Thread.__init__(self)
+        self._should_stop = False
+
+    def stop(self):
+        self._should_stop = True
+
+
+class ServerWaitingThread(StoppableThread):
+    def __init__(self, server:'Server') -> None:
+        StoppableThread.__init__(self)
+        self.name = "server_waiting_thread"
+        self._server = server
+    
+    def run(self):
+        while not self._should_stop:
+            try:
+                conn, adr = self._server._socket.accept()
+            except socket.timeout:
+                pass
+            except KeyboardInterrupt:
+                return
+        self._server._socket.close()
+        return
+
+class Server:
+    def __init__(self) -> None:
+        self._open:bool = False
+        self._address:str = ""
+        self._port:str = ""
+        self._socket:socket.socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    def open(self, address:str="127.0.0.1", port:int=5555, backlog:int=5) -> 'Server':
+        if self._open: return self
+        self._address = address
+        self._port = port
+        try:
+            self._socket.bind((self._address, self._port))
+        except socket.error as e:
+            log("Failed to open server", logTypes.error)
+            return self
+        self.set_timeout(0.5)
+        self._socket.listen(backlog)
+        log("Server is waiting for connection...")
+        thread = ServerWaitingThread(self)
+        Globals.game.register_thread(thread)
+        thread.start()
+        return self
+    
+    def waiting(self):
+        try:
+            conn, adr = self._socket.accept()
+            log("NEW CONNECTION")
+            time.sleep(0.1)
+        except socket.timeout:
+            pass
+        except KeyboardInterrupt:
+            return
+    
+    def set_timeout(self, timeout:float) -> 'Server':
+        self._socket.settimeout(timeout)
+        return self
+
 class Event:
     def __init__(self):
         self.consumed = False
 
+class WidgetClick(Event):
+    def __init__(self):
+        Event.__init__(self)
 
 class Actor(Object):
     def __init__(self, pos:vec3|None=None):
