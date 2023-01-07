@@ -7,9 +7,13 @@ server.open()
 
 
 game.update_size()
-while game.is_alive():
-    game.begin_frame()
+try:
+    while game.is_alive():
+        game.begin_frame()
 
-    game.tick()
+        game.tick()
 
-    game.end_frame()
+        game.end_frame()
+except KeyboardInterrupt:
+    log("Caught KeyboardInterrupt, closing game...", logTypes.warning)
+    game.quit()

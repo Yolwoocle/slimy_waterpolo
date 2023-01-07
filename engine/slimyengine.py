@@ -462,7 +462,6 @@ def import_tiled_tilemap(name:str, path:str, tileset:Tileset) -> Tilemap:
 class Object:
     def __init__(self):
         self._delete_me = False
-        self._reflected = False
 
 class Globals:
     game : 'Game' = None  # type: ignore
@@ -486,6 +485,9 @@ class Game:
         self.active_scene : Scene = Scene()
         
         self._running_threads:List['StoppableThread'] = []
+
+        self._multiplayer:bool = False
+        self._server:None|Server = None
 
         self._frame_debugs = []
         self.debug_infos:dict[str, str] = {"fps": "0", "deltatime": "0"}
@@ -512,7 +514,6 @@ class Game:
     def quit(self) -> bool:
         self._alive=False
         pygame.quit()
-        log("Closing opened threads")
         self.kill_threads()
         return True
     
@@ -726,6 +727,13 @@ class Game:
     @property
     def camera(self) -> 'Camera':
         return self.active_scene.active_camera
+    
+    def host(self, port:int=5050) -> 'Game':
+        self._multiplayer = True
+        self._server = Server()
+        self._server.open(port=port)
+        return self
+
 
 class World:
     def __init__(self) -> None:
@@ -872,7 +880,6 @@ class StoppableThread(threading.Thread):
     def stop(self):
         self._should_stop = True
 
-
 class ServerWaitingThread(StoppableThread):
     def __init__(self, server:'Server') -> None:
         StoppableThread.__init__(self)
@@ -883,6 +890,7 @@ class ServerWaitingThread(StoppableThread):
         while not self._should_stop:
             try:
                 conn, adr = self._server._socket.accept()
+                self._server._new_connection(conn, adr)
             except socket.timeout:
                 pass
             except KeyboardInterrupt:
@@ -890,14 +898,43 @@ class ServerWaitingThread(StoppableThread):
         self._server._socket.close()
         return
 
+class ClientConnectThread(StoppableThread):
+    def __init__(self, client:'Client') -> None:
+        StoppableThread.__init__(self)
+        self.name = "client_connect_thread"
+        self._client = client
+    
+    def run(self):
+        while not self._should_stop:
+            try:
+                self._client._socket.connect((self._client._address, self._client._port))
+                self._client.on_connect()
+                break
+            except socket.timeout:
+                log("Socket connect timeout", logTypes.warning)
+            except ConnectionRefusedError as e:
+                log(f"Connection refused ({e})", logTypes.warning)
+                pass
+            except KeyboardInterrupt:
+                break
+
+class Reflected:
+    def __init__(self) -> None:
+        self._version:int = 0
+    
+    def get_version(self) -> int:
+        return self._version
+
 class Server:
     def __init__(self) -> None:
         self._open:bool = False
         self._address:str = ""
-        self._port:str = ""
+        self._port:int = 5050
         self._socket:socket.socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._clients:list[socket.socket]=[]
+        self._max_clients:int=32
 
-    def open(self, address:str="127.0.0.1", port:int=5555, backlog:int=5) -> 'Server':
+    def open(self, address:str="127.0.0.1", port:int=5050, backlog:int=5) -> 'Server':
         if self._open: return self
         self._address = address
         self._port = port
@@ -914,18 +951,48 @@ class Server:
         thread.start()
         return self
     
-    def waiting(self):
-        try:
-            conn, adr = self._socket.accept()
-            log("NEW CONNECTION")
-            time.sleep(0.1)
-        except socket.timeout:
-            pass
-        except KeyboardInterrupt:
-            return
-    
     def set_timeout(self, timeout:float) -> 'Server':
         self._socket.settimeout(timeout)
+        return self
+    
+    def _new_connection(self, conn:socket.socket, adr):
+        a, b = conn.getpeername()
+        log(f"New connection from {a} by {b}")
+        if len(self._clients)>=self._max_clients: return
+        self._clients.append(conn)
+
+        data = conn.recv(2048).decode()
+        if not data:
+            log("Client disconnected", logTypes.warning)
+        print(f"Received data : {data}")
+    
+    def broadcast(self, message:bytes) -> 'Server':
+        self._socket.sendall(message)
+        return self
+
+class Client:
+    def __init__(self) -> None:
+        self._connected:bool = False
+        self._address:str = ""
+        self._port:int = 5050
+        self._socket:socket.socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    def connect(self, address:str="127.0.0.1", port:int=5050) -> 'Client':
+        self._address=address
+        self._port=port
+        thread = ClientConnectThread(self)
+        Globals.game.register_thread(thread)
+        thread.start()
+        return self
+    
+    def on_connect(self) -> 'Client':
+        self._connected = True
+        self._socket.send(b"Hello")        
+        return self
+    
+    def close(self) -> 'Client':
+        self._socket.close()
+        self._connected = False
         return self
 
 class Event:
